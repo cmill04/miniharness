@@ -5,7 +5,8 @@
  
 class SentinelScanner {
 public:
-    explicit SentinelScanner(std::string sentinel);
+    explicit SentinelScanner(std::string sentinel):
+    sentinel_(sentinel) {}
  
     struct Out { std::string safe_text; bool sentinel_found; };
     Out feed(std::string_view chunk);

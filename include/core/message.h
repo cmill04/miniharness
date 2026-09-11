@@ -6,15 +6,21 @@ enum class Role { System, User, Assistant };
  
 class Message {
 public:
-    Message();
-    Message(Role role, std::string content);
+    Message() : role_(Role::User) {} // Required to initialize empty array slots
+
+    Message(Role role, std::string content):
+         role_(role), content_(content) {}
  
-    Role               role()    const noexcept;
-    const std::string& content() const noexcept;
+
+
+    Role role()    const noexcept {return role_;}
+
+    const std::string& content() const noexcept {return content_;}
  
 private:
     Role        role_;
     std::string content_;
 };
  
+
 
