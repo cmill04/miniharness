@@ -6,7 +6,13 @@
 #include "model/model_client.h"
  
 struct HarnessConfig;
-class InputSource;
+
+class InputSource{
+    public:
+    virtual ~InputSource() = default;
+    virtual bool read_line(std::string& line) = 0;
+}; 
+
 class OutputSink;
  
 class Harness {
