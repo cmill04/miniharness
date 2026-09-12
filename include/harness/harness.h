@@ -3,9 +3,13 @@
 #include <memory>
  
 #include "core/conversation.h"
+#include "core/message.h"
 #include "model/model_client.h"
  
-struct HarnessConfig;
+struct HarnessConfig{
+    std::string sentinel{"<|end_conversation|>"}; 
+    unsigned int max_turns{20}; 
+};
 
 class InputSource{
     public:
@@ -13,7 +17,12 @@ class InputSource{
     virtual bool read_line(std::string& line) = 0;
 }; 
 
-class OutputSink;
+class OutputSink{
+    public:
+    virtual ~OutputSink() = default;
+    virtual void record(const Message& msg) = 0;
+    virtual void display(const std::string& line) = 0; 
+};
  
 class Harness {
 public:
