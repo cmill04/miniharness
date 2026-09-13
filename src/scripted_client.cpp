@@ -3,7 +3,14 @@
 #include <stdexcept>
 
 ScriptedModelClient::ScriptedModelClient(const std::string& path):
-blocks_(parse_blocks(path)){}
+blocks_(parse_blocks(path)){
+    if((!blocks_.empty())&&(blocks_.front().role == "system")){
+        SysInfo_.roleSystem = true;
+        SysInfo_.systemMsg = blocks_.front().content; 
+        blocks_.erase(blocks_.begin());
+    }
+
+}
 void ScriptedModelClient::generate(const Conversation& conv, TokenSink& sink){
     if(next_ >= blocks_.size()){
         throw std::runtime_error("no more scripted replies");

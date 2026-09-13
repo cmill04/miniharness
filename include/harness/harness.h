@@ -9,6 +9,7 @@
 struct HarnessConfig{
     std::string sentinel{"<|end_conversation|>"}; 
     unsigned int max_turns{20}; 
+    std::string sys_string; 
 };
 
 class InputSource{

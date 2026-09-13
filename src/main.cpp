@@ -65,15 +65,40 @@ int main(int argc, char** argv){
 
 
     std::string script_path;
-    std::size_t max_turns =20;
+    unsigned int max_turns =20;
     std::string save_path;
-    std::unique_ptr<ModelClient>model 
-        = std::make_unique<ScriptedModelClient>(script_path);
+    
+    for(int i =1;i<argc; i++){
+        std::string arg = argv[i];
+        if(arg == "--script" && i+1 <argc){
+            script_path = argv[i+1];
+            i++;
+        }
+        if(arg == "--max-turns" && i+1 <argc){
+            max_turns = static_cast<unsigned int>(std::stoul(argv[i+1]));
+            i++;
+        }
+        if(arg == "--save" && i+1 <argc){
+            save_path = argv[i+1];
+            i++;
+        }
+    }
 
+    std::unique_ptr<ScriptedModelClient>model 
+        = std::make_unique<ScriptedModelClient>(script_path);
 
         HarnessConfig cfg;
         cfg.max_turns = max_turns; 
 
+        if(model->system_info().roleSystem){
+            cfg.sys_string = model->system_info().systemMsg; 
+        }
+
+
         Harness harness(std::move(model), cfg);
         ConsoleInputSource in;
-}
+
+        ConsoleOutputSink out(save_path);
+        StopReason result = harness.run(in, out);
+        std::cout<<result.detail<<std::endl; 
+};

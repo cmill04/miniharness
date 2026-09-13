@@ -41,6 +41,12 @@ Harness::Harness(std::unique_ptr<ModelClient> model, HarnessConfig cfg):
  StopReason Harness::run(InputSource& in, OutputSink& out){
     while(true){
 
+        if(!cfg_.sys_string.empty()){
+            Message b{Role::System, cfg_.sys_string};
+            conv_.append(b);
+            out.record(b);
+        }
+
         if((conv_.size()/2)>=cfg_.max_turns){
             return StopReason{StopReason::Kind::TurnLimit,"Turn Limit Reached!"};
         }
