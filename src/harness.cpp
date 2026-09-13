@@ -41,5 +41,31 @@ Harness::Harness(std::unique_ptr<ModelClient> model, HarnessConfig cfg):
  StopReason Harness::run(InputSource& in, OutputSink& out){
     while(true){
 
+        if((conv_.size()/2)>=cfg_.max_turns){
+            return StopReason{StopReason::Kind::TurnLimit,"Turn Limit Reached!"};
+        }
+
+        std::string line; 
+        if(!in.read_line(line)){
+            return StopReason{StopReason::Kind::UserExit, "User Exited"};
+        }
+        else{
+            Message m(Role::User, line); 
+            conv_.append(m);
+            out.record(m);
+        }
+        SentinelScanner scanner(cfg_.sentinel);
+        HarnessSink sink(scanner, out);
+        try {model_->generate(conv_,sink);}
+        catch(const std::exception& e){
+            return StopReason{StopReason::Kind::ClientError, "Error Exit!"};
+        }
+        Message a(Role::Assistant, sink.text());
+        conv_.append(a);
+        out.record(a);
+        if(sink.sentinel_found()){
+            return StopReason{StopReason::Kind::Sentinel, "Sentinel Exit"};
+        }
+        
     }
  } 
