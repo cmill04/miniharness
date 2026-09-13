@@ -21,7 +21,7 @@ void test_empty_conversation_bounds(){
         assert(catch_flg);
     std::cout<<"Stayed in bounds"<<std::endl;
 
-}
+};
 
 void test_system_message(){
     Conversation c;
@@ -36,7 +36,7 @@ void test_system_message(){
     assert(c.at(0).content()=="system detail");
     std::cout<<"role was system at start"<<std::endl;
 
-}
+};
 
 void deep_not_shallow(){
     Message m(Role::System, "system detail");
@@ -51,24 +51,22 @@ void deep_not_shallow(){
     std::cout<<"deep copy was created"<<std::endl;
 
 
-}
+};
 
 void move_test(){
-    
+
     Message m(Role::System, "system detail");
     Conversation start;
     start.append(m);
-    Conversation copy(start);
-    Message n(Role::Assistant, "assistant detail");
-    start.append(n);
+    const Message* adr = start.begin();
     Conversation end; 
 
-    end.move(start);
+    end = std::move(start);
     std::cout<<"testing move constructor"<<std::endl;
-    assert(end.begin()==copy.begin());
+    assert(end.begin() == adr);
     assert(end.begin()!=start.begin());
-    std::Cout<<"move constructor works"<<std::endl;
-}
+    std::cout<<"move constructor works"<<std::endl;
+};
 
 int main(){
     test_empty_conversation_bounds();
@@ -79,4 +77,9 @@ int main(){
 
     deep_not_shallow();
     std::cout<<"deep copy test passed!"<<std::endl;
-}
+
+    move_test();
+    std::cout<<"move test passed!"<<std::endl;
+
+
+};
