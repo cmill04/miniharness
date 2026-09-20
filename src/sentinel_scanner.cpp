@@ -1,4 +1,4 @@
-# include "core/sentinel_scanner.h"
+#include "core/sentinel_scanner.h"
 
 SentinelScanner::Out SentinelScanner::feed(std::string_view chunk) 
 {

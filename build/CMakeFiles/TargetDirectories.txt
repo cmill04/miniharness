@@ -1,0 +1,4 @@
+/home/hamme/miniharness/build/CMakeFiles/miniharness.dir
+/home/hamme/miniharness/build/CMakeFiles/test_p2.dir
+/home/hamme/miniharness/build/CMakeFiles/edit_cache.dir
+/home/hamme/miniharness/build/CMakeFiles/rebuild_cache.dir

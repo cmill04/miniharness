@@ -18,8 +18,8 @@ data_(new Message[other.capacity_]), size_(other.size_), capacity_(other.capacit
 Conversation& Conversation::operator=(const Conversation& other)
 {
     if (this == &other) return *this;
-    Message* new_data_ = new Message[other.capacity_];
-    for (std::size_t i = 0; i < other.size_; i++){
+    Message* new_data_ = new Message[other.capacity_];  //creates the copied array
+    for (std::size_t i = 0; i < other.size_; i++){  //copies the data over
         new_data_[i] = other.data_[i];
     }
 
@@ -43,14 +43,17 @@ Conversation& Conversation::operator=(Conversation&& other) noexcept
     if (this == &other) return *this;
     delete [] data_;
 
+    //copying it over
     data_ = other.data_;
     size_ = other.size_;
     capacity_ = other.capacity_;
 
+    //clearing what was used to copy
     other.data_ = nullptr;
     other.size_ =0;
     other.capacity_=0;
     return *this;
+
 }
 
 void Conversation::append(Message m){
@@ -64,10 +67,12 @@ void Conversation::append(Message m){
         delete [] data_;
         data_ = new_data_;
         capacity_= new_cap;
+
     }
 
     data_[size_] = m;
     size_++;
+
 }
 
 std::size_t Conversation::size() const noexcept {return size_;}

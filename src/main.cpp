@@ -1,104 +1,99 @@
-#include <iostream>
-#include <memory> 
-#include <string> 
-#include <cstddef>
-#include <fstream>
-#include <stdexcept>
-#include "model/scripted_client.h"
+// src/main.cpp
+// PROVIDED — do not modify. CLI parsing is handled for you; your work is
+// Conversation and SentinelScanner (see spec §2 "Note on command-line
+// arguments" and §3).
+
 #include "harness/harness.h"
+#include "model/scripted_client.h"
+#include <iostream>
+#include <fstream>
+#include <string>
 
 namespace {
-    class ConsoleInputSource : public InputSource {
-        public: 
-        bool read_line(std::string& line) override {
-            if (std::getline(std::cin, line)) 
-            {return true;} 
-        else 
-             {return false;}
-}
+
+class StdioInput : public InputSource {
+public:
+    std::string read_line() override {
+        std::string line;
+        std::getline(std::cin, line);
+        eof_ = std::cin.eof();
+        return line;
+    }
+    bool is_eof() const override { return eof_; }
+
+private:
+    bool eof_ = false;
 };
 
-    class ConsoleOutputSink : public OutputSink {
-        public:
-        explicit ConsoleOutputSink(const std::string& save_path){
-            if(!save_path.empty()){
-              file_.open(save_path);
-                if (!file_){
-                    openCheck = false;
-                }
-                else openCheck = true; 
-            }
-            else openCheck = false; 
-            
-        }
+class StdioOutput : public OutputSink {
+public:
+    void write(std::string_view text) override {
+        std::cout << text << std::flush;
+    }
+};
 
-                std::string roleStrConv(Role role) {
-                switch(role) {
-                    case Role::System: return "system";
-                    case Role::User: return "user";
-                    case Role::Assistant: return "assistant";
-                }
-                throw std::runtime_error("unknown role");
-            }
-
-        void record(const Message& msg) override {
-            if(openCheck){
-            file_<<"role: "<<roleStrConv(msg.role())<<std::endl;
-            file_<<msg.content()<<std::endl;
-            file_<<"---"<<std::endl;
-            }
-            
-        }
-
-        void display(const std::string& line) override{
-            std::cout<<line<<std::endl;
-        }
-
-        private: 
-        bool openCheck; 
-        std::ofstream file_; 
-    };
+const char* role_name(Role role) {
+    switch (role) {
+        case Role::System: return "system";
+        case Role::User: return "user";
+        case Role::Assistant: return "assistant";
+    }
+    return "assistant";
 }
 
-int main(int argc, char** argv){
+// Required by spec: saves the conversation in Appendix A transcript format.
+void save_transcript(const Conversation& conv, const std::string& path) {
+    std::ofstream file(path);
+    if (!file.is_open()) return;
 
+    bool first = true;
+    for (const Message* m = conv.begin(); m != conv.end(); ++m) {
+        if (!first) file << "---\n";
+        first = false;
+        file << "role: " << role_name(m->role()) << "\n";
+        file << m->content() << "\n";
+    }
+}
 
+}  // namespace
 
-    std::string script_path;
-    unsigned int max_turns =20;
+int main(int argc, char* argv[]) {
+    std::string script_path = "default.script";
     std::string save_path;
-    
-    for(int i =1;i<argc; i++){
+    HarnessConfig config;
+
+    // Basic CLI argument parsing.
+    for (int i = 1; i < argc; ++i) {
         std::string arg = argv[i];
-        if(arg == "--script" && i+1 <argc){
-            script_path = argv[i+1];
-            i++;
-        }
-        if(arg == "--max-turns" && i+1 <argc){
-            max_turns = static_cast<unsigned int>(std::stoul(argv[i+1]));
-            i++;
-        }
-        if(arg == "--save" && i+1 <argc){
-            save_path = argv[i+1];
-            i++;
-        }
+        if (arg == "--script" && i + 1 < argc) script_path = argv[++i];
+        else if (arg == "--save" && i + 1 < argc) save_path = argv[++i];
+        else if (arg == "--max-turns" && i + 1 < argc) config.max_turns = std::stoi(argv[++i]);
     }
 
-    std::unique_ptr<ScriptedModelClient>model 
-        = std::make_unique<ScriptedModelClient>(script_path);
+    StdioInput in;
+    StdioOutput out;
 
-        HarnessConfig cfg;
-        cfg.max_turns = max_turns; 
+    try {
+        auto scripted_model = std::make_unique<ScriptedModelClient>(script_path);
+        // Pull the system message (if any) out of the concrete client before
+        // type-erasing it into ModelClient — Harness only needs the string,
+        // not the concrete type.
+        config.system_message = scripted_model->system_message();
 
-        if(model->system_info().roleSystem){
-            cfg.sys_string = model->system_info().systemMsg; 
+        Harness harness(std::move(scripted_model), config);
+
+        StopReason reason = harness.run(in, out);
+        std::cout << "[conversation ended: " << reason.detail << "]\n";
+
+        if (!save_path.empty()) {
+            save_transcript(harness.conversation(), save_path);
+            std::cout << "[Transcript saved to " << save_path << "]\n";
         }
 
+    } catch (const std::exception& e) {
+        std::cerr << "Fatal error: " << e.what() << "\n";
+        return 1;
+    }
 
-        Harness harness(std::move(model), cfg);
-        ConsoleInputSource in;
-
-        ConsoleOutputSink out(save_path);
-        StopReason result = harness.run(in, out);
-        std::cout<<result.detail<<std::endl; 
-};
+    return 0;
+}

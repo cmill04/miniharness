@@ -1,77 +1,99 @@
+// src/harness.cpp
+// PROVIDED — do not modify.
+
 #include "harness/harness.h"
+#include "core/sentinel_scanner.h"
+#include <stdexcept>
 
-namespace{
-    class HarnessSink : public TokenSink {
-        public: 
-        HarnessSink(SentinelScanner& scanner, OutputSink& out):
-        scanner_(scanner), out_(out){}
+namespace {
 
-        const std::string& text() const { return text_; }
-        bool sentinel_found() const { return sentinelFound_; }
+constexpr const char* kSentinel = "<|end_conversation|>";
 
-        void on_chunk(std::string_view chunk) override{
-            text_ += chunk; 
-            SentinelScanner::Out result= scanner_.feed(chunk);
-            if(!result.safe_text.empty()){
-                out_.display(result.safe_text);
-            } 
-            if(result.sentinel_found){
-                sentinelFound_ = true; 
-            }
-        };
+// An internal TokenSink that pipes model output directly to the OutputSink
+// while scanning it for the stop sentinel.
+//
+// Two different strings matter here, and they are NOT the same thing:
+//   - what gets printed to the terminal: the sentinel must never appear
+//     (Required Behavior #3).
+//   - what gets stored in the Conversation (and therefore saved to the
+//     transcript): must include the sentinel itself, so that replaying a
+//     saved transcript re-triggers the same stop (Required Behavior #5,
+//     Appendix A's example transcript ends in "...<|end_conversation|>").
+// Anything the model streams AFTER the sentinel is discarded from both —
+// once the sentinel is seen, the reply is over.
+class StreamingSink : public TokenSink {
+public:
+    explicit StreamingSink(OutputSink& out) : out_(out), scanner_(kSentinel) {}
 
-        void on_complete()override {
-            SentinelScanner::Out result = scanner_.flush();
-            if (!result.safe_text.empty()) {
-                out_.display(result.safe_text);
-            }
-        };
+    void on_chunk(std::string_view chunk) override {
+        if (stopped_) return;
+        auto res = scanner_.feed(chunk);
+        out_.write(res.safe_text);
+        stored_text_ += res.safe_text;
+        if (res.sentinel_found) {
+            stored_text_ += kSentinel;
+            stopped_ = true;
+        }
+    }
 
-        private: 
-            SentinelScanner& scanner_;
-            OutputSink& out_;
-            std::string text_; 
-            bool sentinelFound_{false}; 
-    };
+    void on_complete() override {
+        if (!stopped_) {
+            auto res = scanner_.flush();
+            out_.write(res.safe_text);
+            stored_text_ += res.safe_text;
+        }
+    }
+
+    bool stopped() const { return stopped_; }
+    const std::string& stored_text() const { return stored_text_; }
+
+private:
+    OutputSink& out_;
+    SentinelScanner scanner_;
+    bool stopped_ = false;
+    std::string stored_text_;
+};
+}  // namespace
+
+Harness::Harness(std::unique_ptr<ModelClient> model, HarnessConfig cfg)
+    : model_(std::move(model)), cfg_(std::move(cfg)) {
+    // Appendix A: a script/transcript that begins with "role: system" seeds
+    // the conversation's pinned system message, first, before any turns run.
+    if (!cfg_.system_message.empty()) {
+        conv_.append(Message(Role::System, cfg_.system_message));
+    }
 }
 
-Harness::Harness(std::unique_ptr<ModelClient> model, HarnessConfig cfg):
- model_(std::move(model)), cfg_(cfg) {}
+StopReason Harness::run(InputSource& in, OutputSink& out) {
+    int turns = 0;
 
- StopReason Harness::run(InputSource& in, OutputSink& out){
-    while(true){
+    while (turns < cfg_.max_turns) {
+        out.write("you> ");
+        std::string user_text = in.read_line();
 
-        if(!cfg_.sys_string.empty()){
-            Message b{Role::System, cfg_.sys_string};
-            conv_.append(b);
-            out.record(b);
-        }
+        if (in.is_eof()) return {StopReason::Kind::UserExit, "EOF detected"};
+        if (user_text.empty()) continue;
 
-        if((conv_.size()/2)>=cfg_.max_turns){
-            return StopReason{StopReason::Kind::TurnLimit,"Turn Limit Reached!"};
-        }
+        conv_.append(Message(Role::User, user_text));
 
-        std::string line; 
-        if(!in.read_line(line)){
-            return StopReason{StopReason::Kind::UserExit, "User Exited"};
+        out.write("assistant> ");
+        StreamingSink sink(out);
+
+        try {
+            model_->generate(conv_, sink);
+        } catch (const std::exception& e) {
+            out.write("\n");
+            return {StopReason::Kind::ClientError, e.what()};
         }
-        else{
-            Message m(Role::User, line); 
-            conv_.append(m);
-            out.record(m);
+        out.write("\n");
+
+        conv_.append(Message(Role::Assistant, sink.stored_text()));
+
+        if (sink.stopped()) {
+            return {StopReason::Kind::Sentinel,
+                    "stop sentinel after " + std::to_string(turns + 1) + " turns"};
         }
-        SentinelScanner scanner(cfg_.sentinel);
-        HarnessSink sink(scanner, out);
-        try {model_->generate(conv_,sink);}
-        catch(const std::exception& e){
-            return StopReason{StopReason::Kind::ClientError, "Error Exit!"};
-        }
-        Message a(Role::Assistant, sink.text());
-        conv_.append(a);
-        out.record(a);
-        if(sink.sentinel_found()){
-            return StopReason{StopReason::Kind::Sentinel, "Sentinel Exit"};
-        }
-        
+        turns++;
     }
- } 
+    return {StopReason::Kind::TurnLimit, "Max turn limit reached"};
+}
